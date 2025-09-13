@@ -1,195 +1,54 @@
-{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "# 📘 Fiber Optic Agent (Gemini 2.5 Flash)\n",
-    "\n",
-    "This notebook demonstrates how to build a conversational chatbot using **Google Gemini 2.5 Flash API** with a **Gradio interface**.\n",
-    "\n",
-    "The chatbot is designed as a *Fiber Optic Specialist Agent* that answers questions about fiber optics."
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🔑 Step 1: Import Required Libraries"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import os\n",
-    "import gradio as gr\n",
-    "import requests\n",
-    "from dotenv import load_dotenv"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🔐 Step 2: Load API Key from `.env`\n",
-    "\n",
-    "We keep our API key inside a `.env` file for security.\n",
-    "\n",
-    "Example `.env` file:\n",
-    "```\n",
-    "GEMINI_API_KEY=your_api_key_here\n",
-    "```"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "load_dotenv()\n",
-    "GEMINI_API_KEY = os.getenv(\"GEMINI_API_KEY\")"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🌐 Step 3: Define API Endpoint & Headers"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "GEMINI_URL = \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent\"\n",
-    "\n",
-    "headers = {\n",
-    "    \"Content-Type\": \"application/json\",\n",
-    "    \"x-goog-api-key\": GEMINI_API_KEY\n",
-    "}"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🗨️ Step 4: Maintain Conversation History\n",
-    "\n",
-    "We’ll store user + model messages so the chatbot can continue the conversation with context."
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "chat_history = []"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🤖 Step 5: Define Reply Generation Function\n",
-    "\n",
-    "This function:\n",
-    "- Adds user input to chat history\n",
-    "- Sends request to Gemini API\n",
-    "- Parses AI response\n",
-    "- Updates conversation history"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "def generate_reply(user_input):\n",
-    "    chat_history.append({\"role\": \"user\", \"parts\": [{\"text\": user_input}]})\n",
-    "\n",
-    "    body = {\n",
-    "        \"contents\": chat_history,\n",
-    "        \"generationConfig\": {\n",
-    "            \"temperature\": 0.7,\n",
-    "            \"topK\": 1,\n",
-    "            \"topP\": 1,\n",
-    "            \"maxOutputTokens\": 1024,\n",
-    "        }\n",
-    "    }\n",
-    "\n",
-    "    response = requests.post(GEMINI_URL, headers=headers, json=body)\n",
-    "\n",
-    "    if response.status_code == 200:\n",
-    "        result = response.json()\n",
-    "        reply = result[\"candidates\"][0][\"content\"][\"parts\"][0][\"text\"]\n",
-    "        chat_history.append({\"role\": \"model\", \"parts\": [{\"text\": reply}]})\n",
-    "        return reply\n",
-    "    else:\n",
-    "        return f\"Error {response.status_code}: {response.text}\""
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 💻 Step 6: Create Gradio Interface\n",
-    "\n",
-    "We’ll use a simple text-based interface where users can type questions and see model responses."
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "demo = gr.Interface(\n",
-    "    fn=generate_reply,\n",
-    "    inputs=gr.Textbox(label=\"Ask FiberAgent\", placeholder=\"Ask anything about fiber optics...\"),\n",
-    "    outputs=gr.Textbox(label=\"Response\"),\n",
-    "    title=\"Fiber Optic Agent (Gemini 2.5 Flash)\",\n",
-    "    description=\"Powered by Google Gemini 2.5 Flash. Ask questions related to fiber optics.\",\n",
-    ")"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "## 🚀 Step 7: Launch the App\n",
-    "\n",
-    "Run the interface with a public shareable link."
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "demo.launch(share=True)"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "name": "python",
-   "version": "3.10"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
+import os
+import gradio as gr
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+# Headers for Gemini API
+headers = {
+    "Content-Type": "application/json",
+    "x-goog-api-key": GEMINI_API_KEY
 }
+
+# Conversation history per session
+chat_history = []
+
+def generate_reply(user_input):
+    chat_history.append({"role": "user", "parts": [{"text": user_input}]})
+
+
+    body = {
+        "contents": chat_history,
+        "generationConfig": {
+            "temperature": 0.7,
+            "topK": 1,
+            "topP": 1,
+            "maxOutputTokens": 1024,
+        }
+    }
+
+    response = requests.post(GEMINI_URL, headers=headers, json=body)
+
+    if response.status_code == 200:
+        result = response.json()
+        reply = result["candidates"][0]["content"]["parts"][0]["text"]
+        chat_history.append({"role": "model", "parts": [{"text": reply}]})
+
+        return reply
+    else:
+        return f"Error {response.status_code}: {response.text}"
+
+# Gradio interface
+demo = gr.Interface(
+    fn=generate_reply,
+    inputs=gr.Textbox(label="Ask FiberAgent", placeholder="Ask anything about fiber optics..."),
+    outputs=gr.Textbox(label="Response"),
+    title="Fiber Optic Agent (Gemini 2.5 Flash)",
+    description="Powered by Google Gemini 2.5 Flash. Ask questions related to fiber optics.",
+)
+
+if __name__ == "__main__":
+    demo.launch(share=True)
