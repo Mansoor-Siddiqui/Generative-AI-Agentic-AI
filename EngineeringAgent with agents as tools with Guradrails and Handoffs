@@ -1,0 +1,163 @@
+import os
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+import chainlit as cl
+from agents import (
+    Agent,
+    InputGuardrail,
+    GuardrailFunctionOutput,
+    Runner,
+    AsyncOpenAI,
+    OpenAIChatCompletionsModel,
+    set_tracing_disabled
+)
+from agents.exceptions import InputGuardrailTripwireTriggered
+
+# Load API key
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Disable tracing
+set_tracing_disabled(disabled=True)
+
+# Initialize Gemini API client
+external_client: AsyncOpenAI = AsyncOpenAI(
+    api_key=GEMINI_API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+)
+llm_model: OpenAIChatCompletionsModel = OpenAIChatCompletionsModel(
+    model="gemini-2.5-flash",
+    openai_client=external_client
+)
+
+# -------------------------------
+# Guardrail Schema
+# -------------------------------
+class EngineeringOutput(BaseModel):
+    is_question: bool = Field(..., description="Is the user asking an engineering technology related question?")
+    reasoning: str
+
+# -------------------------------
+# Guardrail Agent
+# -------------------------------
+guardrail_agent = Agent(
+    name="Guardrail check",
+    instructions=(
+        "Determine if the user query is about engineering technology. "
+        "Valid domains: mechanical, electrical, computer, civil, textile engineering. "
+        "If the query is unrelated (e.g. personal, medical, politics, religion, chit-chat), "
+        "set is_question = False and explain why in reasoning."
+    ),
+    output_type=EngineeringOutput,
+    model=llm_model
+)
+
+# -------------------------------
+# Guardrail Function
+# -------------------------------
+async def engineering_guardrail(ctx, agent, input_data):
+    result = await Runner.run(guardrail_agent, input_data, context=ctx.context)
+    final_output = result.final_output_as(EngineeringOutput)
+    print("[Guardrail check]", final_output)
+
+    if not final_output.is_question:
+        return GuardrailFunctionOutput(
+            output_info=final_output,
+            tripwire_triggered=True
+        )
+
+    return GuardrailFunctionOutput(
+        output_info=final_output,
+        tripwire_triggered=False
+    )
+
+# -------------------------------
+# Tutor Agents
+# -------------------------------
+mechanical_tutor_agent = Agent(
+    name="Mechanical Engineering Tutor",
+    instructions="Help with mechanical engineering problems, explain each step.",
+    model=llm_model
+)
+
+electrical_tutor_agent = Agent(
+    name="Electrical Engineering Tutor",
+    instructions="Help with electrical engineering problems, explain each step.",
+    model=llm_model
+)
+
+computer_tutor_agent = Agent(
+    name="Computer Engineering Tutor",
+    instructions="Help with computer engineering problems, explain each step.",
+    model=llm_model
+)
+
+civil_tutor_agent = Agent(
+    name="Civil Engineering Tutor",
+    instructions="Help with civil engineering problems, explain each step.",
+    model=llm_model
+)
+
+textile_tutor_agent = Agent(
+    name="Textile Engineering Tutor",
+    instructions="Help with textile engineering problems, explain each step.",
+    model=llm_model
+)
+
+# -------------------------------
+# Triage Agent
+# -------------------------------
+triage_agent = Agent(
+    name="Triage Agent",
+    instructions="Decide which category the question belongs to: 'mechanical', 'electrical', 'computer', 'civil', or 'textile'. Respond ONLY with the category name.",
+    input_guardrails=[InputGuardrail(guardrail_function=engineering_guardrail)],
+    model=llm_model
+)
+
+# -------------------------------
+# Tool Registry
+# -------------------------------
+TOOLS = {
+    "mechanical": mechanical_tutor_agent,
+    "electrical": electrical_tutor_agent,
+    "computer": computer_tutor_agent,
+    "civil": civil_tutor_agent,
+    "textile": textile_tutor_agent,
+}
+
+# -------------------------------
+# Chainlit Events
+# -------------------------------
+@cl.on_chat_start
+async def on_chat_start():
+    await cl.Message(
+        content="👋 Hi! Ask me about **mechanical, electrical, computer, civil, or textile engineering problems only**."
+    ).send()
+
+@cl.on_message
+async def on_message(message: cl.Message):
+    try:
+        # Step 1: Run triage (guardrail runs automatically here)
+        await cl.Message(content=f"🕵️ **Triage Agent** is analyzing your question: '{message.content}'").send()
+        triage_result = await Runner.run(triage_agent, message.content)
+        category = triage_result.final_output.strip().lower()
+        print("[Triage decision]", category)
+
+        # Step 2: Route to correct agent
+        chosen_agent = TOOLS.get(category)
+        if not chosen_agent:
+            await cl.Message(content="❓ Sorry, I couldn't categorize your question into engineering fields.").send()
+            return
+
+        # Step 3: Announce handoff
+        await cl.Message(content=f"📡 Triage Agent is handing off to **{chosen_agent.name}**").send()
+
+        # Step 4: Tutor response
+        tutor_result = await Runner.run(chosen_agent, message.content)
+        await cl.Message(content=f"🤖 **{chosen_agent.name}** says: {tutor_result.final_output}").send()
+
+    except InputGuardrailTripwireTriggered as e:
+        reason = getattr(e, "args", ["Your question is not related to engineering technology."])[0]
+        await cl.Message(
+            content=f"🚫 Sorry, I can only answer **engineering technology questions**.\n\nReason: {reason}"
+        ).send()
