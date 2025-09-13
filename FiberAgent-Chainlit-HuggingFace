@@ -1,0 +1,62 @@
+import os
+from dotenv import load_dotenv
+import chainlit as cl
+from google.generativeai import configure, GenerativeModel
+
+# Load environment variables
+load_dotenv()
+
+# Get the Gemini API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    print("❌ GEMINI_API_KEY is missing")
+else:
+    print("🔐 GEMINI_API_KEY loaded successfully")
+
+# Configure Gemini API
+configure(api_key=GEMINI_API_KEY)
+
+# Initialize Gemini 2.5 Flash model
+try:
+    model = GenerativeModel(model_name="models/gemini-1.5-flash")
+    print("✅ Gemini 2.5 Flash model initialized")
+except Exception as e:
+    print(f"❌ Error initializing model: {e}")
+
+# On chat start
+@cl.on_chat_start
+async def on_chat_start():
+    print("🚀 Chat session started")
+    await cl.Message(content="👋 Hi! I'm your **Fiber Optic Specialist Agent** powered by **Gemini 2.5 Flash**.\n\nAsk me anything about fiber optics!").send()
+
+# On message
+@cl.on_message
+async def on_message(message: cl.Message):
+    print("📩 User message received:", repr(message.content))
+    try:
+        # Get response from Gemini
+        response = await cl.make_async(model.generate_content)(message.content)
+        print("✅ Gemini API response received")
+
+        # Try extracting the text
+        text = getattr(response, "text", None)
+        if not text:
+            try:
+                # Use a more robust extraction method
+                text = response.candidates[0].content.parts[0].text
+                print("🔍 Extracted fallback response text:", repr(text))
+            except Exception as parse_exc:
+                print("⚠️ Failed to extract text from response:", parse_exc)
+                text = "⚠️ Sorry, I couldn't understand the response from Gemini."
+
+        # Create a Chainlit Message object and send it
+        msg = cl.Message(content="")
+        await msg.send() # Send an initial empty message
+        await msg.stream_token(text) # Stream the full text to the message
+        print("📤 Sent response to user:", repr(text))
+
+    except Exception as e:
+        error_msg = f"❌ Error generating response: {e}"
+        print(error_msg)
+        await cl.Message(content=error_msg).send()
